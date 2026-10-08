@@ -1,0 +1,11 @@
+.DS_Store
+.mimosa/
+.build/
+build/
+*.app
+DerivedData/
+# Секреты и пользовательские данные — никогда в репозиторий
+.stenograf/
+config.json
+*.wav
+*.aiff

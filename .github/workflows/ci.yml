@@ -1,0 +1,19 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift build
+        run: swift build
+      - name: Tests (unit; E2E-транскрипция пропустится без whisper-cli)
+        run: swift test
+      - name: CLI smoke
+        run: |
+          .build/debug/stenograf help
+          .build/debug/stenograf config && exit 0 || true
