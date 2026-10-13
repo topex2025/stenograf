@@ -114,13 +114,39 @@ struct StenografApp: App {
 }
 
 /// Открывает окно встреч при запуске (MenuBarExtra-первое приложение само его не показывает).
+/// Надёжно: дожимаем циклом — сцена SwiftUI может быть готова не сразу, одна попытка терялась.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let maxAttempts = 12
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            if NSApp.windows.first(where: { $0.canBecomeMain && $0.frame.height > 100 }) == nil {
-                NSApp.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil)
+        NSApp.activate(ignoringOtherApps: true)
+        ensureMainWindow(attempt: 0)
+    }
+
+    private func ensureMainWindow(attempt: Int) {
+        let hasWindow = NSApp.windows.contains { $0.canBecomeMain && $0.frame.height > 100 }
+        if hasWindow { return }
+        triggerNewWindowFromMenu()
+        NSApp.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil)
+        guard attempt < Self.maxAttempts else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.ensureMainWindow(attempt: attempt + 1)
+        }
+    }
+
+    /// Кликает пункт меню File → New Window программно — единственный
+    /// гарантированный способ открыть окно WindowGroup у MenuBarExtra-first приложения.
+    private func triggerNewWindowFromMenu() {
+        let menus = NSApp.mainMenu?.items ?? []
+        for item in menus {
+            guard let submenu = item.submenu else { continue }
+            for i in 0..<submenu.numberOfItems {
+                if submenu.item(at: i)?.title == "New Window" {
+                    submenu.performActionForItem(at: i)
+                    return
+                }
             }
-            NSApp.activate(ignoringOtherApps: true)
         }
     }
 }
