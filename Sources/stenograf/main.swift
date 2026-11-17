@@ -110,6 +110,7 @@ case "login":
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: cli)
     proc.arguments = ["login"]
+    proc.environment = CodexSubscriptionBrain.processEnvironment()
     proc.standardInput = nil
     proc.standardOutput = FileHandle.standardOutput
     proc.standardError = FileHandle.standardError

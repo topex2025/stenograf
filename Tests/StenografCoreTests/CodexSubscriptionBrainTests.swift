@@ -40,8 +40,8 @@ final class CodexSubscriptionBrainTests: XCTestCase {
         XCTAssertTrue(args.contains("user-text"), "user-текст передан: \(args)")
     }
 
-    func testFailureSurfacesStderr() async throws {
-        let fake = makeFakeCodex(script: "echo 'usage limit reached' >&2; exit 3\n")
+    func testUsageLimitBecomesFriendlyMessage() async throws {
+        let fake = makeFakeCodex(script: "echo 'You’ve hit your usage limit. Visit https://chatgpt.com/settings/usage to purchase more credits or try again at Nov 18th, 2026 9:36 AM.' >&2; exit 1\n")
         defer { try? FileManager.default.removeItem(atPath: fake) }
         let brain = CodexSubscriptionBrain(cliPath: fake, timeout: 30)
         do {
@@ -49,7 +49,22 @@ final class CodexSubscriptionBrainTests: XCTestCase {
             XCTFail("ожидали ошибку")
         } catch let error as StenografError {
             guard case .badBrainResponse(let detail) = error else { return XCTFail("не тот тип: \(error)") }
-            XCTAssertTrue(detail.contains("3") && detail.contains("usage limit"), "должен пробросить код и stderr: \(detail)")
+            XCTAssertTrue(detail.contains("лимит подписки"), "должно быть человеческое сообщение: \(detail)")
+            XCTAssertTrue(detail.contains("Nov 18th"), "должен показать срок сброса: \(detail)")
+            XCTAssertFalse(detail.contains("codex exec упал"), "сырой код тут не нужен: \(detail)")
+        }
+    }
+
+    func testFailureSurfacesStderr() async throws {
+        let fake = makeFakeCodex(script: "echo 'connection refused' >&2; exit 3\n")
+        defer { try? FileManager.default.removeItem(atPath: fake) }
+        let brain = CodexSubscriptionBrain(cliPath: fake, timeout: 30)
+        do {
+            _ = try await brain.complete(system: "s", user: "u")
+            XCTFail("ожидали ошибку")
+        } catch let error as StenografError {
+            guard case .badBrainResponse(let detail) = error else { return XCTFail("не тот тип: \(error)") }
+            XCTAssertTrue(detail.contains("3") && detail.contains("connection refused"), "должен пробросить код и stderr: \(detail)")
         }
     }
 

@@ -51,6 +51,24 @@ public struct CodexSubscriptionBrain: BrainProvider {
         return (false, "auth_mode=\(mode), токенов нет — нужен stenograf login")
     }
 
+    /// Окружение для запуска codex: GUI-приложения из Dock/Finder не наследуют
+    /// PATH терминала, а codex — node-скрипт (#!/usr/bin/env node). Дописываем
+    /// типичные пути node сами, откуда бы приложение ни запустили.
+    public static func processEnvironment() -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        let required = [
+            "/usr/local/bin",
+            "/opt/homebrew/bin",
+            "/usr/bin",
+            "/bin",
+            NSHomeDirectory() + "/.stenograf/cli/bin",
+        ]
+        var path = (env["PATH"] ?? "").split(separator: ":").map(String.init)
+        for p in required where !path.contains(p) { path.append(p) }
+        env["PATH"] = path.joined(separator: ":")
+        return env
+    }
+
     public func complete(system: String, user: String) async throws -> String {
         let fm = FileManager.default
         guard fm.fileExists(atPath: cliPath) || cliPath == "codex" else {
@@ -71,6 +89,7 @@ public struct CodexSubscriptionBrain: BrainProvider {
         }
         args.append("\(system)\n\n===\n\n\(user)")
         process.arguments = args
+        process.environment = Self.processEnvironment()
         process.currentDirectoryURL = outDir
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
@@ -85,6 +104,14 @@ public struct CodexSubscriptionBrain: BrainProvider {
         guard process.terminationStatus == 0 else {
             let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
             let errText = String(data: errData.prefix(1500), encoding: .utf8) ?? ""
+            // лимит подписки — самая частая «не-ошибка»: переводим на человеческий
+            if errText.lowercased().contains("usage limit") {
+                let until = errText.range(of: #"try again at[^.]*"#, options: .regularExpression)
+                    .map { String(errText[$0]) } ?? "позже"
+                throw StenografError.badBrainResponse(
+                    "лимит подписки ChatGPT исчерпан — выжимка/протокол пройдут после сброса квоты (\(until)). Аудио и транскрипт сохранены, ничего не потеряно."
+                )
+            }
             throw StenografError.badBrainResponse("codex exec упал (код \(process.terminationStatus)): \(errText)")
         }
         guard let text = try? String(contentsOf: outFile, encoding: .utf8),

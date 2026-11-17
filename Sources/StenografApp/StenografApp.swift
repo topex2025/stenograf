@@ -194,6 +194,7 @@ final class AppModel: ObservableObject {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: cli)
         proc.arguments = ["login"]
+        proc.environment = CodexSubscriptionBrain.processEnvironment()
         try? proc.run()
         proc.waitUntilExit()
         let status = CodexSubscriptionBrain.loginStatus()
