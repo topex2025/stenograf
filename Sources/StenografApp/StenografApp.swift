@@ -572,58 +572,8 @@ extension Color {
     static let stenoInk = Color(red: 0.04, green: 0.06, blue: 0.10)   // чернильный
 }
 
-/// Разбор markdown-протокола в блоки для красивой вёрстки.
-enum MarkdownBlock: Identifiable {
-    case header(String)
-    case bullet(String)
-    case ordered(Int, String)
-    case table([[String]])
-    case para(String)
-
-    var id: String {
-        switch self {
-        case .header(let s): "h:\(s)"
-        case .bullet(let s): "b:\(s)"
-        case .ordered(let n, let s): "o:\(n):\(s)"
-        case .table(let rows): "t:\(rows.map { $0.joined(separator: "|") }.joined(separator: "\n"))"
-        case .para(let s): "p:\(s)"
-        }
-    }
-
-    static func parse(_ md: String) -> [MarkdownBlock] {
-        var blocks: [MarkdownBlock] = []
-        var tableBuffer: [[String]] = []
-
-        func flushTable() {
-            guard !tableBuffer.isEmpty else { return }
-            blocks.append(.table(tableBuffer))
-            tableBuffer = []
-        }
-
-        for rawLine in md.components(separatedBy: .newlines) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty { flushTable(); continue }
-            if line.hasPrefix("## ") { flushTable(); blocks.append(.header(String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces))); continue }
-            if line.hasPrefix("# ") { flushTable(); blocks.append(.header(String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces))); continue }
-            if line.hasPrefix("|") {
-                let cells = line.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
-                if cells.allSatisfy({ $0.isEmpty || $0.allSatisfy { $0 == "-" || $0 == ":" || $0.isWhitespace } }) { continue } // разделитель
-                tableBuffer.append(cells)
-                continue
-            }
-            flushTable()
-            if line.hasPrefix("- ") || line.hasPrefix("* ") { blocks.append(.bullet(String(line.dropFirst(2)))); continue }
-            let digits = line.prefix(while: { $0.isNumber })
-            if !digits.isEmpty, let n = Int(digits), line.dropFirst(digits.count).hasPrefix(". ") {
-                blocks.append(.ordered(n, String(line.dropFirst(digits.count + 2))))
-                continue
-            }
-            blocks.append(.para(line))
-        }
-        flushTable()
-        return blocks
-    }
-}
+// Разбор markdown-протокола в блоки переехал в StenografCore (MarkdownBlock.swift) —
+// им пользуется и интерфейс, и PDF-экспорт.
 
 /// Протокол, свёрстанный как документ: секции с акцентной полосой, таблица обязательств.
 struct ProtocolDocument: View {
@@ -794,16 +744,40 @@ struct MeetingDetailSheet: View {
                                     .foregroundStyle(.secondary)
                                 Spacer()
                                 CopyButton(text: proto.text, label: L10n.t(.copy))
+                                PDFButton {
+                                    let isSummary = proto.name.hasPrefix("summary")
+                                    savePDF(
+                                        PDFExporter.exportDocument(
+                                            title: meeting.title,
+                                            subtitle: subtitleLine,
+                                            markdown: proto.text
+                                        ),
+                                        name: "\(meeting.title) — \(isSummary ? L10n.t(.summaryTitle) : L10n.t(.protocolTitle))"
+                                    )
+                                }
                             }
                             ProtocolDocument(markdown: proto.text)
                         }
                     }
                     if let transcript = texts.transcript, !transcript.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text(L10n.t(.transcriptTitle))
-                                .font(.system(size: 11, weight: .heavy))
-                                .kerning(1.5)
-                                .foregroundStyle(.secondary)
+                            HStack {
+                                Text(L10n.t(.transcriptTitle))
+                                    .font(.system(size: 11, weight: .heavy))
+                                    .kerning(1.5)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                PDFButton {
+                                    savePDF(
+                                        PDFExporter.exportTranscript(
+                                            title: meeting.title,
+                                            subtitle: subtitleLine,
+                                            transcript: transcript
+                                        ),
+                                        name: "\(meeting.title) — \(L10n.t(.transcriptTitle))"
+                                    )
+                                }
+                            }
                             TranscriptView(transcript: transcript)
                                 .padding(16)
                                 .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
@@ -815,6 +789,30 @@ struct MeetingDetailSheet: View {
             }
         }
         .frame(minWidth: 700, idealWidth: 760, minHeight: 540, idealHeight: 640)
+    }
+
+    private var subtitleLine: String {
+        "\(meeting.createdAt.formatted(date: .abbreviated, time: .shortened))\(meeting.durationSeconds.map { " · \(Int($0)) \(L10n.t(.secondsShort))" } ?? "")"
+    }
+
+    /// Сохраняет PDF в «Загрузки», показывает файл в Finder и сообщает в статус.
+    private func savePDF(_ data: Data, name rawName: String) {
+        let name = rawName.replacingOccurrences(of: "/", with: "—")
+        let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        var url = downloads.appendingPathComponent("\(name).pdf")
+        var attempt = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = downloads.appendingPathComponent("\(name) (\(attempt)).pdf")
+            attempt += 1
+        }
+        do {
+            try data.write(to: url)
+            model.lastMessage = L10n.tf(.pdfSavedFmt, url.lastPathComponent)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            model.lastMessage = "PDF не сохранён: \(error.localizedDescription)"
+        }
     }
 
     private var allText: String {
@@ -1145,6 +1143,19 @@ struct QuestionSheet: View {
             }
         }
         .frame(minWidth: 560, idealWidth: 640, minHeight: 480, idealHeight: 560)
+    }
+}
+
+/// Кнопка выгрузки секции в PDF (без диалогов: сразу в «Загрузки» + показ в Finder).
+struct PDFButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(L10n.t(.pdfButton), systemImage: "arrow.down.doc")
+                .font(.caption)
+        }
+        .buttonStyle(.bordered)
     }
 }
 

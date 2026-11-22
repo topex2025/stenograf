@@ -27,6 +27,7 @@ public enum L10n {
         case transcriptTitle, protocolTitle, copyAll, copy, done, noProtocol
         case summaryButton, protocolButton, transcribeButton, summaryTitle
         case listenButton, pauseButton, listenTitle
+        case pdfButton, pdfSavedFmt
         case askButton, askTitle, listening, recognizing, thinking, askPlaceholder, answerTitle, sourcesFmt
         case secondsShort, autoTranscribing, autoDoneFmt, autoFailedFmt
         case recordStopped, quit, meetingsTitle, brainSuffixLocal
@@ -61,6 +62,8 @@ public enum L10n {
             .listenButton: "Прослушать",
             .pauseButton: "Пауза",
             .listenTitle: "ЗАПИСЬ",
+            .pdfButton: "PDF",
+            .pdfSavedFmt: "PDF сохранён в Загрузки: %@",
             .askButton: "Спросить",
             .askTitle: "ВОПРОС ПО ВСТРЕЧАМ",
             .listening: "Слушаю… говори вопрос, потом нажми стоп",
@@ -106,6 +109,8 @@ public enum L10n {
             .listenButton: "Play",
             .pauseButton: "Pause",
             .listenTitle: "RECORDING",
+            .pdfButton: "PDF",
+            .pdfSavedFmt: "PDF saved to Downloads: %@",
             .askButton: "Ask",
             .askTitle: "ASK YOUR MEETINGS",
             .listening: "Listening… speak your question, then hit stop",
@@ -151,6 +156,8 @@ public enum L10n {
             .listenButton: "Escuchar",
             .pauseButton: "Pausa",
             .listenTitle: "GRABACIÓN",
+            .pdfButton: "PDF",
+            .pdfSavedFmt: "PDF guardado en Descargas: %@",
             .askButton: "Preguntar",
             .askTitle: "PREGUNTA A TUS REUNIONES",
             .listening: "Escuchando… di tu pregunta y pulsa detener",
