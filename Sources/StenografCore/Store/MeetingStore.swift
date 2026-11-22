@@ -70,6 +70,25 @@ public struct MeetingStore: Sendable {
         return url
     }
 
+    /// Свежайший документ встречи нужного вида ("summary" / "protocol") или nil.
+    /// Свежесть — по метке времени в имени файла (…-2026-11-22T05-10-13Z.md).
+    public func latestDocument(meeting: Meeting, prefix: String) -> URL? {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: summariesDir(for: meeting), includingPropertiesForKeys: nil) else {
+            return nil
+        }
+        func stamp(_ name: String) -> String {
+            if let r = name.range(of: #"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z"#, options: .regularExpression) {
+                return String(name[r])
+            }
+            return ""
+        }
+        return files
+            .filter { $0.pathExtension == "md" && $0.deletingPathExtension().lastPathComponent.hasPrefix(prefix) }
+            .sorted { stamp($0.lastPathComponent) > stamp($1.lastPathComponent) }
+            .first
+    }
+
     public func readTranscript(_ meeting: Meeting) throws -> String {
         try String(contentsOf: transcriptURL(for: meeting), encoding: .utf8)
     }

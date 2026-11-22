@@ -28,6 +28,7 @@ public enum L10n {
         case summaryButton, protocolButton, transcribeButton, summaryTitle
         case listenButton, pauseButton, listenTitle
         case pdfButton, pdfSavedFmt
+        case openExistingSummary, openExistingProtocol, regenerateButton
         case askButton, askTitle, listening, recognizing, thinking, askPlaceholder, answerTitle, sourcesFmt
         case secondsShort, autoTranscribing, autoDoneFmt, autoFailedFmt
         case recordStopped, quit, meetingsTitle, brainSuffixLocal
@@ -64,6 +65,9 @@ public enum L10n {
             .listenTitle: "ЗАПИСЬ",
             .pdfButton: "PDF",
             .pdfSavedFmt: "PDF сохранён в Загрузки: %@",
+            .openExistingSummary: "Выжимка уже готова — открыл",
+            .openExistingProtocol: "Протокол уже готов — открыл",
+            .regenerateButton: "Обновить",
             .askButton: "Спросить",
             .askTitle: "ВОПРОС ПО ВСТРЕЧАМ",
             .listening: "Слушаю… говори вопрос, потом нажми стоп",
@@ -111,6 +115,9 @@ public enum L10n {
             .listenTitle: "RECORDING",
             .pdfButton: "PDF",
             .pdfSavedFmt: "PDF saved to Downloads: %@",
+            .openExistingSummary: "Summary is ready — opened it",
+            .openExistingProtocol: "Protocol is ready — opened it",
+            .regenerateButton: "Refresh",
             .askButton: "Ask",
             .askTitle: "ASK YOUR MEETINGS",
             .listening: "Listening… speak your question, then hit stop",
@@ -158,6 +165,9 @@ public enum L10n {
             .listenTitle: "GRABACIÓN",
             .pdfButton: "PDF",
             .pdfSavedFmt: "PDF guardado en Descargas: %@",
+            .openExistingSummary: "El resumen ya está listo — abierto",
+            .openExistingProtocol: "El acta ya está lista — abierta",
+            .regenerateButton: "Actualizar",
             .askButton: "Preguntar",
             .askTitle: "PREGUNTA A TUS REUNIONES",
             .listening: "Escuchando… di tu pregunta y pulsa detener",

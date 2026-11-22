@@ -342,7 +342,14 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func summarize(_ meeting: Meeting, template: PromptTemplate = .meetingProtocol) {
+    func summarize(_ meeting: Meeting, template: PromptTemplate = .meetingProtocol, force: Bool = false) {
+        // Готовый документ не перегенерируем — просто открываем (квота мозгов не резиновая).
+        let prefix = template == .summary ? "summary" : "protocol"
+        if !force, store.latestDocument(meeting: meeting, prefix: prefix) != nil {
+            lastMessage = template == .summary ? L10n.t(.openExistingSummary) : L10n.t(.openExistingProtocol)
+            selectedMeeting = meeting
+            return
+        }
         busy = true
         lastMessage = "Спрашиваю мозг…"
         let store = self.store
@@ -765,6 +772,14 @@ struct MeetingDetailSheet: View {
                                     .kerning(1.5)
                                     .foregroundStyle(.secondary)
                                 Spacer()
+                                Button {
+                                    model.summarize(meeting, template: proto.name.hasPrefix("summary") ? .summary : .meetingProtocol, force: true)
+                                } label: {
+                                    Label(L10n.t(.regenerateButton), systemImage: "arrow.clockwise")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.bordered)
+                                .help("Сделать заново через мозг")
                                 CopyButton(text: proto.text, label: L10n.t(.copy))
                                 PDFButton {
                                     let isSummary = proto.name.hasPrefix("summary")
