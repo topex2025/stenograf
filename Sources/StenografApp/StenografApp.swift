@@ -735,6 +735,25 @@ struct MeetingDetailSheet: View {
                     }
                 }
                 Spacer()
+                // Полный отчёт одним PDF: выжимка + протокол
+                Button {
+                    let texts = model.detailTexts(for: meeting)
+                    let summary = texts.protocols.first { $0.name.hasPrefix("summary") }?.text
+                    let protocolText = texts.protocols.first { $0.name.hasPrefix("protocol") }?.text
+                    if let summary, let protocolText {
+                        savePDF(
+                            PDFExporter.exportFullReport(
+                                title: meeting.title, subtitle: subtitleLine,
+                                summaryMarkdown: summary, protocolMarkdown: protocolText
+                            ),
+                            name: "\(meeting.title) — Отчёт (выжимка+протокол)"
+                        )
+                    }
+                } label: {
+                    Label(L10n.t(.fullReportButton), systemImage: "doc.richtext")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderedProminent)
                 CopyButton(text: allText, label: L10n.t(.copyAll))
                 Button(L10n.t(.done)) { player.stop(); model.selectedMeeting = nil }
                     .keyboardShortcut(.defaultAction)

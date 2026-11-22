@@ -24,6 +24,20 @@ public enum PDFExporter {
         return render(text)
     }
 
+    /// Полный отчёт одним файлом: выжимка + протокол.
+    public static func exportFullReport(title: String, subtitle: String,
+                                        summaryMarkdown: String, protocolMarkdown: String) -> Data {
+        let text = NSMutableAttributedString()
+        appendHeader(title: title, subtitle: subtitle, to: text)
+        text.append(attributed("ВЫЖИМКА\n", font: headerFont, color: ink))
+        appendBlocks(MarkdownBlock.parse(summaryMarkdown), to: text)
+        appendBreak(to: text)
+        appendBreak(to: text)
+        text.append(attributed("ПРОТОКОЛ ВСТРЕЧИ\n", font: headerFont, color: ink))
+        appendBlocks(MarkdownBlock.parse(protocolMarkdown), to: text)
+        return render(text)
+    }
+
     /// PDF транскрипта: строки «[мм:сс] реплика».
     public static func exportTranscript(title: String, subtitle: String, transcript: String) -> Data {
         let text = NSMutableAttributedString()
