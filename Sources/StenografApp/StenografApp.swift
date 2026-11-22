@@ -336,8 +336,13 @@ final class AppModel: ObservableObject {
                 )
                 _ = try store.writeSummary(answer, template: template, brain: name, to: meeting)
                 await MainActor.run {
-                    self.lastMessage = "Резюме сохранено"
+                    self.lastMessage = "Готово — открыл \((template == .summary) ? "выжимку" : "протокол") в окне встречи"
                     self.busy = false
+                    self.reload()
+                    // результат — сразу на экран, а не в файл молча
+                    if let fresh = self.meetings.first(where: { $0.id == meeting.id }) {
+                        self.selectedMeeting = fresh
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -774,17 +779,8 @@ struct MeetingDetailSheet: View {
             let texts = model.detailTexts(for: meeting)
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    if let transcript = texts.transcript, !transcript.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(L10n.t(.transcriptTitle))
-                                .font(.system(size: 11, weight: .heavy))
-                                .kerning(1.5)
-                                .foregroundStyle(.secondary)
-                            TranscriptView(transcript: transcript)
-                                .padding(16)
-                                .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
-                        }
-                    }
+                    // СНАЧАЛА результаты — выжимка и протокол, транскрипт в конец:
+                    // выводы важнее простыни, пользователь не должен их искать прокруткой
                     if texts.protocols.isEmpty {
                         Label(L10n.t(.noProtocol), systemImage: "doc.badge.plus")
                             .font(.callout).foregroundStyle(.secondary)
@@ -800,6 +796,17 @@ struct MeetingDetailSheet: View {
                                 CopyButton(text: proto.text, label: L10n.t(.copy))
                             }
                             ProtocolDocument(markdown: proto.text)
+                        }
+                    }
+                    if let transcript = texts.transcript, !transcript.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(L10n.t(.transcriptTitle))
+                                .font(.system(size: 11, weight: .heavy))
+                                .kerning(1.5)
+                                .foregroundStyle(.secondary)
+                            TranscriptView(transcript: transcript)
+                                .padding(16)
+                                .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
                 }
