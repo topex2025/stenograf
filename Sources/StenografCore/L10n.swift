@@ -30,6 +30,7 @@ public enum L10n {
         case pdfButton, pdfSavedFmt
         case openExistingSummary, openExistingProtocol, regenerateButton
         case fullReportButton
+        case reportButton
         case askButton, askTitle, listening, recognizing, thinking, askPlaceholder, answerTitle, sourcesFmt
         case secondsShort, autoTranscribing, autoDoneFmt, autoFailedFmt
         case recordStopped, quit, meetingsTitle, brainSuffixLocal
@@ -68,6 +69,7 @@ public enum L10n {
             .pdfSavedFmt: "PDF сохранён в Загрузки: %@",
             .openExistingSummary: "Выжимка уже готова — открыл",
             .fullReportButton: "Отчёт PDF",
+            .reportButton: "Отчёт",
             .openExistingProtocol: "Протокол уже готов — открыл",
             .regenerateButton: "Обновить",
             .askButton: "Спросить",
@@ -119,6 +121,7 @@ public enum L10n {
             .pdfSavedFmt: "PDF saved to Downloads: %@",
             .openExistingSummary: "Summary is ready — opened it",
             .fullReportButton: "Full report PDF",
+            .reportButton: "Report",
             .openExistingProtocol: "Protocol is ready — opened it",
             .regenerateButton: "Refresh",
             .askButton: "Ask",
@@ -170,6 +173,7 @@ public enum L10n {
             .pdfSavedFmt: "PDF guardado en Descargas: %@",
             .openExistingSummary: "El resumen ya está listo — abierto",
             .fullReportButton: "Informe PDF",
+            .reportButton: "Informe",
             .openExistingProtocol: "El acta ya está lista — abierta",
             .regenerateButton: "Actualizar",
             .askButton: "Preguntar",

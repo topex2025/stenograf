@@ -4,16 +4,17 @@ import XCTest
 final class PromptAndConfigTests: XCTestCase {
     func testProtocolPromptHasPromiseSectionsAndNoHallucinationRule() {
         let prompt = PromptTemplate.meetingProtocol.systemPrompt()
-        XCTAssertTrue(prompt.contains("Обязательства"), "должен быть раздел обязательств")
-        XCTAssertTrue(prompt.contains("Кто"), "таблица: Кто")
-        XCTAssertTrue(prompt.contains("Срок"), "таблица: Срок")
+        // единый отчёт: обязательная структура
+        for section in ["Суть одной фразой", "Выжимка", "Решения", "Обязательства",
+                        "Даты", "Деньги", "Открытые вопросы", "Участники", "Следующие шаги"] {
+            XCTAssertTrue(prompt.contains(section), "нет секции \(section)")
+        }
+        XCTAssertTrue(prompt.contains("| Кто | Что пообещал | Кому | Срок |"), "таблица обязательств")
+        XCTAssertTrue(prompt.contains("пропускай"), "пустые секции должны пропускаться")
         XCTAssertTrue(prompt.contains("не выдумывай") || prompt.contains("Ничего не выдумывай"), "запрет галлюцинаций")
-        XCTAssertTrue(prompt.contains("Участники"))
-        XCTAssertTrue(prompt.contains("Следующие шаги"))
-        XCTAssertTrue(prompt.contains("Суть разговора"), "первой секцией — выжимка сути")
-        XCTAssertTrue(prompt.range(of: "Суть разговора").map { $0.lowerBound < prompt.range(of: "Участники")!.lowerBound } ?? false,
-                      "выжимка должна идти раньше участников")
-        // отдельный шаблон выжимки
+        XCTAssertTrue(prompt.range(of: "Суть одной фразой").map { $0.lowerBound < prompt.range(of: "Участники")!.lowerBound } ?? false,
+                      "суть должна идти раньше участников")
+        // отдельный шаблон выжимки (совместимость)
         XCTAssertTrue(PromptTemplate.summary.systemPrompt().contains("выжимка") || PromptTemplate.summary.systemPrompt().contains("суть"))
     }
 

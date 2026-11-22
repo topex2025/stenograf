@@ -464,12 +464,9 @@ struct MeetingRow: View {
                 Button(L10n.t(.transcribeButton)) { model.transcribe(meeting) }
                     .font(.caption).disabled(model.busy)
             } else {
-                HStack(spacing: 6) {
-                    Button(L10n.t(.summaryButton)) { model.summarize(meeting, template: .summary) }
-                        .font(.caption).disabled(model.busy)
-                    Button(L10n.t(.protocolButton)) { model.summarize(meeting) }
-                        .font(.caption).disabled(model.busy)
-                }
+                // единый документ: кнопка «Отчёт» открывает готовый или генерирует
+                Button(L10n.t(.reportButton)) { model.summarize(meeting) }
+                    .font(.caption).disabled(model.busy)
             }
         }
         .padding(.vertical, 2)
@@ -735,19 +732,32 @@ struct MeetingDetailSheet: View {
                     }
                 }
                 Spacer()
-                // Полный отчёт одним PDF: выжимка + протокол
+                // Отчёт PDF: единый документ; для старых встреч — склейка выжимки и протокола
                 Button {
                     let texts = model.detailTexts(for: meeting)
                     let summary = texts.protocols.first { $0.name.hasPrefix("summary") }?.text
                     let protocolText = texts.protocols.first { $0.name.hasPrefix("protocol") }?.text
-                    if let summary, let protocolText {
-                        savePDF(
-                            PDFExporter.exportFullReport(
-                                title: meeting.title, subtitle: subtitleLine,
-                                summaryMarkdown: summary, protocolMarkdown: protocolText
-                            ),
-                            name: "\(meeting.title) — Отчёт (выжимка+протокол)"
+                    let data: Data?
+                    if let protocolText, let summary {
+                        // старый формат: два раздельных документа
+                        data = PDFExporter.exportFullReport(
+                            title: meeting.title, subtitle: subtitleLine,
+                            summaryMarkdown: summary, protocolMarkdown: protocolText
                         )
+                    } else if let protocolText {
+                        // новый единый отчёт: выжимка уже внутри
+                        data = PDFExporter.exportDocument(
+                            title: meeting.title, subtitle: subtitleLine, markdown: protocolText
+                        )
+                    } else if let summary {
+                        data = PDFExporter.exportDocument(
+                            title: meeting.title, subtitle: subtitleLine, markdown: summary
+                        )
+                    } else {
+                        data = nil
+                    }
+                    if let data {
+                        savePDF(data, name: "\(meeting.title) — Отчёт")
                     }
                 } label: {
                     Label(L10n.t(.fullReportButton), systemImage: "doc.richtext")
