@@ -283,17 +283,39 @@ final class AppModel: ObservableObject {
     }
 
     /// Тексты встречи для окна-детали: транскрипт + все протоколы (свежие сверху).
+    /// Тексты встречи для окна: одна АКТУАЛЬНАЯ выжимка + один АКТУАЛЬНЫЙ протокол
+    /// (свежайшие по времени в имени файла) + транскрипт. История версий остаётся
+    /// на диске, но не плодит секции: пользователь скачивает выжимку одним файлом
+    /// и протокол одним файлом.
     func detailTexts(for meeting: Meeting) -> (transcript: String?, protocols: [(name: String, text: String)]) {
         let transcript = try? store.readTranscript(meeting)
-        var protocols: [(String, String)] = []
-        if let files = try? FileManager.default.contentsOfDirectory(at: store.summariesDir(for: meeting), includingPropertiesForKeys: nil) {
-            for f in files.sorted(by: { $0.lastPathComponent > $1.lastPathComponent }) where f.pathExtension == "md" {
-                if let text = try? String(contentsOf: f, encoding: .utf8) {
-                    protocols.append((f.deletingPathExtension().lastPathComponent, text))
-                }
-            }
+        guard let files = try? FileManager.default.contentsOfDirectory(at: store.summariesDir(for: meeting), includingPropertiesForKeys: nil) else {
+            return (transcript, [])
         }
-        return (transcript, protocols)
+
+        // временная метка из имени (summary-<мозг>-2026-11-22T05-10-13Z) — по ней «свежесть»
+        func stamp(_ name: String) -> String {
+            if let r = name.range(of: #"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z"#, options: .regularExpression) {
+                return String(name[r])
+            }
+            return ""
+        }
+
+        let md = files
+            .filter { $0.pathExtension == "md" }
+            .map { (name: $0.deletingPathExtension().lastPathComponent, stamp: stamp($0.deletingPathExtension().lastPathComponent), url: $0) }
+            .sorted { $0.stamp > $1.stamp }
+
+        var result: [(String, String)] = []
+        if let latestSummary = md.first(where: { $0.name.hasPrefix("summary") }),
+           let text = try? String(contentsOf: latestSummary.url, encoding: .utf8) {
+            result.append((latestSummary.name, text))
+        }
+        if let latestProtocol = md.first(where: { $0.name.hasPrefix("protocol") }),
+           let text = try? String(contentsOf: latestProtocol.url, encoding: .utf8) {
+            result.append((latestProtocol.name, text))
+        }
+        return (transcript, result)
     }
 
     func transcribe(_ meeting: Meeting) {
