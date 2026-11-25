@@ -261,6 +261,7 @@ final class AppModel: ObservableObject {
                 await MainActor.run {
                     self.lastMessage = L10n.tf(.autoFailedFmt, error.localizedDescription)
                     self.busy = false
+                    self.reload()
                 }
             }
         }
@@ -282,40 +283,25 @@ final class AppModel: ObservableObject {
         return FileManager.default.fileExists(atPath: u.path) ? u : nil
     }
 
-    /// Тексты встречи для окна-детали: транскрипт + все протоколы (свежие сверху).
-    /// Тексты встречи для окна: одна АКТУАЛЬНАЯ выжимка + один АКТУАЛЬНЫЙ протокол
-    /// (свежайшие по времени в имени файла) + транскрипт. История версий остаётся
-    /// на диске, но не плодит секции: пользователь скачивает выжимку одним файлом
-    /// и протокол одним файлом.
     func detailTexts(for meeting: Meeting) -> (transcript: String?, protocols: [(name: String, text: String)]) {
-        let transcript = try? store.readTranscript(meeting)
-        guard let files = try? FileManager.default.contentsOfDirectory(at: store.summariesDir(for: meeting), includingPropertiesForKeys: nil) else {
-            return (transcript, [])
+        let documents: [(name: String, text: String)] = ["summary", "protocol"].compactMap { kind in
+            guard let url = store.latestDocument(meeting: meeting, prefix: kind),
+                  let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+            return (url.deletingPathExtension().lastPathComponent, text)
         }
+        return (try? store.readTranscript(meeting), documents)
+    }
 
-        // временная метка из имени (summary-<мозг>-2026-11-22T05-10-13Z) — по ней «свежесть»
-        func stamp(_ name: String) -> String {
-            if let r = name.range(of: #"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z"#, options: .regularExpression) {
-                return String(name[r])
+    func saveTranscript(_ text: String, for meeting: Meeting) -> Bool {
+        guard !busy, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        do {
+            if try store.readTranscript(meeting) != text {
+                try store.correctTranscript(text, for: meeting)
             }
-            return ""
+            return true
+        } catch {
+            return false
         }
-
-        let md = files
-            .filter { $0.pathExtension == "md" }
-            .map { (name: $0.deletingPathExtension().lastPathComponent, stamp: stamp($0.deletingPathExtension().lastPathComponent), url: $0) }
-            .sorted { $0.stamp > $1.stamp }
-
-        var result: [(String, String)] = []
-        if let latestSummary = md.first(where: { $0.name.hasPrefix("summary") }),
-           let text = try? String(contentsOf: latestSummary.url, encoding: .utf8) {
-            result.append((latestSummary.name, text))
-        }
-        if let latestProtocol = md.first(where: { $0.name.hasPrefix("protocol") }),
-           let text = try? String(contentsOf: latestProtocol.url, encoding: .utf8) {
-            result.append((latestProtocol.name, text))
-        }
-        return (transcript, result)
     }
 
     func transcribe(_ meeting: Meeting) {
@@ -359,11 +345,10 @@ final class AppModel: ObservableObject {
                 let transcript = try store.readTranscript(meeting)
                 let (name, brainCfg) = try cfg.brain(named: nil)
                 let brain = BrainFactory.make(brainCfg)
-                let answer = try await brain.complete(
-                    system: template.systemPrompt(),
-                    user: "Транскрипт встречи:\n\n\(transcript)"
+                try await Pipeline.summarize(
+                    transcript: transcript, meeting: meeting, store: store,
+                    brain: brain, brainName: name, template: template
                 )
-                _ = try store.writeSummary(answer, template: template, brain: name, to: meeting)
                 await MainActor.run {
                     self.lastMessage = "Готово — открыл \((template == .summary) ? "выжимку" : "протокол") в окне встречи"
                     self.busy = false
@@ -464,6 +449,8 @@ struct MeetingRow: View {
                 Button(L10n.t(.transcribeButton)) { model.transcribe(meeting) }
                     .font(.caption).disabled(model.busy)
             } else {
+                Button(L10n.t(.detailsButton)) { model.selectedMeeting = meeting }
+                    .font(.caption)
                 // единый документ: кнопка «Отчёт» открывает готовый или генерирует
                 Button(L10n.t(.reportButton)) { model.summarize(meeting) }
                     .font(.caption).disabled(model.busy)
@@ -717,6 +704,9 @@ struct MeetingDetailSheet: View {
     @EnvironmentObject var model: AppModel
     let meeting: Meeting
     @StateObject private var player = PlayerModel()
+    @State private var editingTranscript = false
+    @State private var transcriptDraft = ""
+    @State private var transcriptSaveFailed = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -792,6 +782,10 @@ struct MeetingDetailSheet: View {
                     if texts.protocols.isEmpty {
                         Label(L10n.t(.noProtocol), systemImage: "doc.badge.plus")
                             .font(.callout).foregroundStyle(.secondary)
+                        if texts.transcript != nil {
+                            Button(L10n.t(.reportButton)) { model.summarize(meeting) }
+                                .disabled(model.busy || editingTranscript)
+                        }
                     }
                     ForEach(texts.protocols, id: \.name) { proto in
                         VStack(alignment: .leading, spacing: 12) {
@@ -833,6 +827,14 @@ struct MeetingDetailSheet: View {
                                     .kerning(1.5)
                                     .foregroundStyle(.secondary)
                                 Spacer()
+                                if !editingTranscript {
+                                    Button(L10n.t(.editTranscript)) {
+                                        transcriptDraft = transcript
+                                        transcriptSaveFailed = false
+                                        editingTranscript = true
+                                    }
+                                    .disabled(model.busy)
+                                }
                                 PDFButton {
                                     savePDF(
                                         PDFExporter.exportTranscript(
@@ -844,9 +846,24 @@ struct MeetingDetailSheet: View {
                                     )
                                 }
                             }
-                            TranscriptView(transcript: transcript)
-                                .padding(16)
-                                .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+                            if editingTranscript {
+                                TextEditor(text: $transcriptDraft).frame(minHeight: 200)
+                                HStack {
+                                    Button(L10n.t(.cancelTranscriptEdit)) { editingTranscript = false }
+                                    Button(L10n.t(.saveTranscriptEdit)) {
+                                        transcriptSaveFailed = !model.saveTranscript(transcriptDraft, for: meeting)
+                                        if !transcriptSaveFailed { editingTranscript = false }
+                                    }
+                                    .disabled(model.busy || transcriptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                }
+                                if transcriptSaveFailed {
+                                    Text(L10n.t(.transcriptSaveFailed)).foregroundStyle(.red)
+                                }
+                            } else {
+                                TranscriptView(transcript: transcript)
+                                    .padding(16)
+                                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+                            }
                         }
                     }
                 }
@@ -914,7 +931,9 @@ final class Speaker: ObservableObject {
     static let piperBin = NSHomeDirectory() + "/.stenograf/tts/bin/piper"
     static let piperModel = NSHomeDirectory() + "/.stenograf/voices/ru_RU-dmitri-medium.onnx"
     static var piperAvailable: Bool {
-        FileManager.default.fileExists(atPath: piperBin) && FileManager.default.fileExists(atPath: piperModel)
+        FileManager.default.isExecutableFile(atPath: piperBin)
+            && FileManager.default.fileExists(atPath: piperModel)
+            && FileManager.default.fileExists(atPath: piperModel + ".json")
     }
 
     private static func fallbackVoice() -> String {

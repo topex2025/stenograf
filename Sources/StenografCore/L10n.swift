@@ -29,6 +29,7 @@ public enum L10n {
         case listenButton, pauseButton, listenTitle
         case pdfButton, pdfSavedFmt
         case openExistingSummary, openExistingProtocol, regenerateButton
+        case detailsButton, editTranscript, cancelTranscriptEdit, saveTranscriptEdit, transcriptSaveFailed
         case fullReportButton
         case reportButton
         case askButton, askTitle, listening, recognizing, thinking, askPlaceholder, answerTitle, sourcesFmt
@@ -57,6 +58,11 @@ public enum L10n {
             .copyAll: "Скопировать всё",
             .copy: "Копировать",
             .done: "Готово",
+            .detailsButton: "Открыть",
+            .editTranscript: "Исправить текст",
+            .cancelTranscriptEdit: "Отмена",
+            .saveTranscriptEdit: "Сохранить текст",
+            .transcriptSaveFailed: "Не удалось сохранить транскрипт.",
             .noProtocol: "Протокола ещё нет — нажми «Протокол» в списке",
             .summaryButton: "Выжимка",
             .protocolButton: "Протокол",
@@ -109,6 +115,11 @@ public enum L10n {
             .copyAll: "Copy all",
             .copy: "Copy",
             .done: "Done",
+            .detailsButton: "Open",
+            .editTranscript: "Edit transcript",
+            .cancelTranscriptEdit: "Cancel",
+            .saveTranscriptEdit: "Save transcript",
+            .transcriptSaveFailed: "Could not save the transcript.",
             .noProtocol: "No protocol yet — hit “Protocol” in the list",
             .summaryButton: "Summary",
             .protocolButton: "Protocol",
@@ -161,6 +172,11 @@ public enum L10n {
             .copyAll: "Copiar todo",
             .copy: "Copiar",
             .done: "Listo",
+            .detailsButton: "Abrir",
+            .editTranscript: "Editar transcripción",
+            .cancelTranscriptEdit: "Cancelar",
+            .saveTranscriptEdit: "Guardar transcripción",
+            .transcriptSaveFailed: "No se pudo guardar la transcripción.",
             .noProtocol: "Aún no hay acta — pulsa «Acta» en la lista",
             .summaryButton: "Resumen",
             .protocolButton: "Acta",

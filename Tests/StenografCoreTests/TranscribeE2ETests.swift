@@ -33,7 +33,7 @@ final class TranscribeE2ETests: XCTestCase {
         try conv.run(); conv.waitUntilExit()
         XCTAssertEqual(conv.terminationStatus, 0, "afconvert не сконвертировал")
 
-        let whisper = WhisperCLI(cliPath: whisperPath, modelPath: modelPath, language: "ru")
+        let whisper = WhisperCLI(cliPath: whisperPath, modelPath: modelPath, language: "auto")
         let result = try whisper.transcribe(audioFile: wav)
 
         XCTAssertFalse(result.text.isEmpty, "пустой транскрипт")
@@ -42,6 +42,7 @@ final class TranscribeE2ETests: XCTestCase {
             lowered.contains("стенограф") || lowered.contains("записывает") || lowered.contains("протокол"),
             "транскрипт не узнал опорные слова, получил: \(result.text)"
         )
+        XCTAssertEqual(result.detectedLanguage, "ru")
         XCTAssertFalse(result.segments.isEmpty, "нет сегментов с таймкодами")
     }
 }

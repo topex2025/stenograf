@@ -30,7 +30,7 @@ func loadOrCreateConfig() throws -> AppConfig {
     if !FileManager.default.fileExists(atPath: AppConfig.configURL.path) {
         let cfg = AppConfig.makeDefault()
         try cfg.save()
-        FileHandle.standardError.write("Создан конфиг-заготовка: \(AppConfig.configURL.path)\nЗаполни ключ и модель — см. README.\n".data(using: .utf8)!)
+        FileHandle.standardError.write("Создан конфиг: \(AppConfig.configURL.path)\nДля ChatGPT войдите через stenograf login. API-ключ для этого режима не нужен.\n".data(using: .utf8)!)
     }
     return try AppConfig.load()
 }
@@ -153,6 +153,10 @@ case "record":
     var seconds: Int?
     var i = 1
     while i < args.count {
+        if ["--title", "--seconds"].contains(args[i]), i + 1 == args.count {
+            print("Не указано значение для \(args[i]).")
+            exit(1)
+        }
         switch args[i] {
         case "--title": title = args[i + 1]; i += 2
         case "--seconds": seconds = Int(args[i + 1]); i += 2
@@ -220,7 +224,8 @@ case "transcribe":
             wavPath = store.audioURL(for: meeting).path
         } else if FileManager.default.fileExists(atPath: args[1]) {
             meeting = try store.create(title: (args[1] as NSString).lastPathComponent)
-            wavPath = args[1]
+            wavPath = store.audioURL(for: meeting).path
+            try FileManager.default.copyItem(atPath: args[1], toPath: wavPath)
             meeting.audioFile = "audio.wav"
             try store.saveMeta(&meeting)
         } else {
@@ -245,6 +250,10 @@ case "summarize":
     var question: String?
     var i = 1
     while i < args.count {
+        if ["--brain", "--template", "--ask"].contains(args[i]), i + 1 == args.count {
+            print("Не указано значение для \(args[i]).")
+            exit(1)
+        }
         switch args[i] {
         case "--brain": brainName = args[i + 1]; i += 2
         case "--template": template = PromptTemplate(rawValue: args[i + 1]) ?? .meetingProtocol; i += 2

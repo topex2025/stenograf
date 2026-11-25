@@ -113,26 +113,50 @@ public enum PDFExporter {
         }
     }
 
-    /// Таблица: колонки равной ширины по таб-остановкам; шапка жирная.
+    /// Переносим текст внутри каждой ячейки до разметки по колонкам.
     static func appendTable(_ rows: [[String]], to text: NSMutableAttributedString) {
-        let columns = rows.map(\.count).max() ?? 1
+        guard let columns = rows.map(\.count).max(), columns > 0 else { return }
         let usable = pageRect.width - inset * 2
-        let colWidth = usable / CGFloat(columns)
+        let fractions: [CGFloat] = columns == 4
+            ? [0.16, 0.44, 0.18, 0.22]
+            : Array(repeating: 1 / CGFloat(columns), count: columns)
+        let widths = fractions.map { $0 * usable }
+        var offset: CGFloat = 0
         let para = NSMutableParagraphStyle()
-        para.tabStops = (1..<columns).map { NSTextTab(type: .leftTabStopType, location: colWidth * CGFloat($0)) }
+        para.tabStops = widths.dropLast().map { width in
+            offset += width
+            return NSTextTab(textAlignment: .left, location: offset, options: [:])
+        }
 
         for (rowIndex, cells) in rows.enumerated() {
             let font = rowIndex == 0 ? tableHeadFont : tableFont
-            let line = cells.enumerated()
-                .map { $0.offset == 0 ? $0.element : "\t\($0.element)" }
-                .joined()
-            text.append(attributed(line, font: font, color: rowIndex == 0 ? red : ink, paragraph: para))
-            appendBreak(to: text)
-            if rowIndex == 0 {
-                text.append(attributed(String(repeating: "—", count: 90), font: NSFont.systemFont(ofSize: 7), color: gray, paragraph: para))
-                appendBreak(to: text)
+            let color = rowIndex == 0 ? red : ink
+            let wrapped = widths.enumerated().map { column, width in
+                wrapCell(column < cells.count ? cells[column] : "", font: font, width: max(8, width - 10))
             }
+            let height = wrapped.map(\.count).max() ?? 0
+            for index in 0..<height {
+                let line = wrapped.map { index < $0.count ? $0[index] : "" }.joined(separator: "\t")
+                text.append(attributed(line + "\n", font: font, color: color, paragraph: para))
+            }
+            appendBreak(to: text)
         }
+    }
+
+    private static func wrapCell(_ text: String, font: NSFont, width: CGFloat) -> [String] {
+        guard !text.isEmpty else { return [] }
+        let source = text as NSString
+        let typesetter = CTTypesetterCreateWithAttributedString(attributed(text, font: font, color: ink))
+        var result: [String] = []
+        var start = 0
+        while start < source.length {
+            let suggested = CTTypesetterSuggestLineBreak(typesetter, start, Double(width))
+            let length = suggested > 0 ? suggested : source.rangeOfComposedCharacterSequence(at: start).length
+            let line = source.substring(with: NSRange(location: start, length: length))
+            result.append(line.trimmingCharacters(in: .whitespaces))
+            start += length
+        }
+        return result
     }
 
     // MARK: - Пагинация CoreText → PDF

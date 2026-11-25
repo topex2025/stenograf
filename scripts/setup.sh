@@ -5,28 +5,41 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+PREBUILT="${1:-}"
+if [ "$PREBUILT" = "--prebuilt" ]; then
+  APP="Stenograf.app"
+  CLI="$APP/Contents/MacOS/stenograf"
+  [ -x "$CLI" ] || { echo "В архиве не нашёлся Stenograf.app. Распакуй архив целиком."; exit 1; }
+else
+  APP="build/Stenograf.app"
+  CLI=".build/debug/stenograf"
+fi
+
 bold() { printf "\033[1m%s\033[0m\n" "$1"; }
 
-bold "== 1/5. Homebrew-зависимости (whisper.cpp, node для codex)"
+bold "== 1/6. Homebrew-зависимости (whisper.cpp, node для codex)"
 command -v brew >/dev/null || { echo "Сначала поставь Homebrew: https://brew.sh"; exit 1; }
 command -v whisper-cli >/dev/null || brew install whisper-cpp
 command -v npm >/dev/null || brew install node
 
-bold "== 2/5. Модель Whisper (один раз, ~500 МБ, с докачкой при обрывах)"
+bold "== 2/6. Модель Whisper (один раз, ~500 МБ, с докачкой при обрывах)"
 MODEL_DIR="$HOME/.cache/whisper"
 MODEL="$MODEL_DIR/ggml-medium-q5_0.bin"
 mkdir -p "$MODEL_DIR"
-if [ ! -f "$MODEL" ]; then
+if [ ! -s "$MODEL" ] || [ "$(wc -c < "$MODEL" | tr -d ' ')" != "539212467" ]; then
   URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin"
-  for i in $(seq 1 60); do
-    curl -L -C - --connect-timeout 20 --max-time 540 -o "$MODEL" "$URL" && break
-    echo "  попытка $i оборвалась — докачиваю…"; sleep 3
-  done
+  partial="$MODEL.download"
+  if [ ! -s "$partial" ] || [ "$(wc -c < "$partial" | tr -d ' ')" != "539212467" ]; then
+    curl --fail --location --continue-at - --retry 3 --connect-timeout 20 --max-time 540 \
+      -o "$partial" "$URL" || { echo "Модель Whisper не скачалась. Запусти установку ещё раз, чтобы продолжить."; exit 1; }
+  fi
+  [ "$(wc -c < "$partial" | tr -d ' ')" = "539212467" ] || { echo "Размер модели Whisper не совпал. Удали $partial и повтори установку."; exit 1; }
+  mv -f "$partial" "$MODEL"
 else
   echo "  модель уже на месте"
 fi
 
-bold "== 3/5. Codex CLI — мост к подписке ChatGPT (~/.stenograf/cli)"
+bold "== 3/6. Codex CLI — мост к подписке ChatGPT (~/.stenograf/cli)"
 CODEX_BIN="$HOME/.stenograf/cli/bin/codex"
 if [ ! -x "$CODEX_BIN" ]; then
   mkdir -p "$HOME/.stenograf/cli"
@@ -37,32 +50,46 @@ if [ ! -x "$CODEX_BIN" ]; then
     npm install -g --prefix "$HOME/.stenograf/cli" @openai/codex "$ALIAS" && break
     echo "  npm попытка $i не прошла, пробую снова…"; sleep 5
   done
+  [ -x "$CODEX_BIN" ] || { echo "Не удалось установить Codex CLI. Повтори установку."; exit 1; }
 else
   echo "  codex уже установлен"
 fi
 
-bold "== 4/6. Сборка Стенографа"
-swift build
-./scripts/make-app.sh
+if [ "$PREBUILT" = "--prebuilt" ]; then
+  bold "== 4/6. Готовое приложение найдено"
+else
+  bold "== 4/6. Сборка Стенографа"
+  swift build
+  bash scripts/make-app.sh
+fi
 
 bold "== 5/6. Нейроголос Piper (озвучка ответов — человеческий голос вместо системного)"
-if [ ! -x "$HOME/.stenograf/tts/bin/piper" ]; then
-  python3 -m venv "$HOME/.stenograf/tts"
-  "$HOME/.stenograf/tts/bin/pip" install -q piper-tts || echo "  (не вышло — останется системный голос)"
+PIPER_DIR="$HOME/.stenograf/tts"
+if [ ! -x "$PIPER_DIR/bin/piper" ]; then
+  if command -v python3 >/dev/null && python3 -m venv "$PIPER_DIR"; then
+    "$PIPER_DIR/bin/pip" install -q piper-tts || true
+  fi
 fi
-VOICES="$HOME/.stenograf/voices"
-mkdir -p "$VOICES"
-if [ ! -s "$VOICES/ru_RU-dmitri-medium.onnx" ]; then
+if [ -x "$PIPER_DIR/bin/piper" ]; then
+  VOICES="$HOME/.stenograf/voices"
+  mkdir -p "$VOICES"
   for f in ru_RU-dmitri-medium.onnx ru_RU-dmitri-medium.onnx.json; do
-    for i in $(seq 1 40); do
-      curl -sL -C - --connect-timeout 20 --max-time 300 -o "$VOICES/$f" \
-        "https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/dmitri/medium/$f" && break
-      sleep 3
-    done
+    if [ ! -s "$VOICES/$f" ]; then
+      if curl --fail --silent --show-error --location --retry 2 --connect-timeout 20 --max-time 180 \
+          -o "$VOICES/$f.download" "https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/dmitri/medium/$f"; then
+        mv -f "$VOICES/$f.download" "$VOICES/$f"
+      else
+        echo "  голос Piper не скачался — останется системный голос"
+        break
+      fi
+    fi
   done
+else
+  echo "  Piper не установлен — останется системный голос"
 fi
 
 bold "== 6/6. Вход в ChatGPT (подписка Plus/Pro)"
-.build/debug/stenograf login
+"$CLI" config
+"$CLI" login
 
-bold "Готово! Приложение: build/Stenograf.app · проверка: .build/debug/stenograf config"
+bold "Готово! Открой $APP"

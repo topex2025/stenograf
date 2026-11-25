@@ -18,6 +18,14 @@ public enum MarkdownBlock: Identifiable {
         }
     }
 
+    private static func plainInline(_ text: String) -> String {
+        guard let parsed = try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        ) else { return text }
+        return String(parsed.characters)
+    }
+
     public static func parse(_ md: String) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
         var tableBuffer: [[String]] = []
@@ -31,22 +39,24 @@ public enum MarkdownBlock: Identifiable {
         for rawLine in md.components(separatedBy: .newlines) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             if line.isEmpty { flushTable(); continue }
-            if line.hasPrefix("## ") { flushTable(); blocks.append(.header(String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces))); continue }
-            if line.hasPrefix("# ") { flushTable(); blocks.append(.header(String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces))); continue }
+            if line.hasPrefix("## ") { flushTable(); blocks.append(.header(plainInline(String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)))); continue }
+            if line.hasPrefix("# ") { flushTable(); blocks.append(.header(plainInline(String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces)))); continue }
             if line.hasPrefix("|") {
-                let cells = line.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+                let body = line.hasSuffix("|") && line.count > 1 ? line.dropFirst().dropLast() : line.dropFirst()
+                let cells = body.split(separator: "|", omittingEmptySubsequences: false)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
                 if cells.allSatisfy({ $0.isEmpty || $0.allSatisfy { $0 == "-" || $0 == ":" || $0.isWhitespace } }) { continue } // разделитель
-                tableBuffer.append(cells)
+                tableBuffer.append(cells.map(plainInline))
                 continue
             }
             flushTable()
-            if line.hasPrefix("- ") || line.hasPrefix("* ") { blocks.append(.bullet(String(line.dropFirst(2)))); continue }
+            if line.hasPrefix("- ") || line.hasPrefix("* ") { blocks.append(.bullet(plainInline(String(line.dropFirst(2))))); continue }
             let digits = line.prefix(while: { $0.isNumber })
             if !digits.isEmpty, let n = Int(digits), line.dropFirst(digits.count).hasPrefix(". ") {
-                blocks.append(.ordered(n, String(line.dropFirst(digits.count + 2))))
+                blocks.append(.ordered(n, plainInline(String(line.dropFirst(digits.count + 2)))))
                 continue
             }
-            blocks.append(.para(line))
+            blocks.append(.para(plainInline(line)))
         }
         flushTable()
         return blocks

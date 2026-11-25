@@ -1,24 +1,43 @@
 #!/bin/bash
-# Собирает меню-бар приложение Stenograf.app (без подписи — для локального запуска).
-# Для продажи понадобится Apple Developer ID + нотаризация (см. docs/DECISIONS.md D8).
+# Собирает Stenograf.app. С --release собирает универсальное приложение с CLI.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift build --product StenografApp
+VERSION="${STENOGRAF_VERSION:-0.7.0}"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Ожидается версия вида 0.7.0"; exit 1; }
 
-APP="Stenograf.app"
-rm -rf "$APP" "build/$APP"
-mkdir -p "build/$APP/Contents/MacOS"
-cp .build/debug/StenografApp "build/$APP/Contents/MacOS/StenografApp"
-cat > "build/$APP/Contents/Info.plist" <<'PLIST'
+APP="build/Stenograf.app"
+RELEASE="${1:-}"
+if [ "$RELEASE" = "--release" ]; then
+  arm=(--scratch-path .build/release-arm64 -c release --triple arm64-apple-macosx13.0)
+  intel=(--scratch-path .build/release-x86_64 -c release --triple x86_64-apple-macosx13.0)
+  swift build "${arm[@]}"
+  swift build "${intel[@]}"
+  ARM_BIN=$(swift build "${arm[@]}" --show-bin-path)
+  INTEL_BIN=$(swift build "${intel[@]}" --show-bin-path)
+else
+  swift build --product StenografApp
+  BIN_DIR=$(swift build --show-bin-path)
+fi
+
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS"
+if [ "$RELEASE" = "--release" ]; then
+  for binary in StenografApp stenograf; do
+    lipo -create "$ARM_BIN/$binary" "$INTEL_BIN/$binary" -output "$APP/Contents/MacOS/$binary"
+  done
+else
+  cp "$BIN_DIR/StenografApp" "$APP/Contents/MacOS/StenografApp"
+fi
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key><string>Stenograf</string>
     <key>CFBundleIdentifier</key><string>ru.stenograf.app</string>
-    <key>CFBundleVersion</key><string>0.1.0</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key><string>$VERSION</string>
+    <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleExecutable</key><string>StenografApp</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSMicrophoneUsageDescription</key>
@@ -27,5 +46,10 @@ cat > "build/$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-echo "Готово: build/$APP"
-echo "Запуск: open build/$APP  (первый раз система спросит доступ к микрофону)"
+if [ "${1:-}" = "--release" ]; then
+  codesign --force --sign - "$APP/Contents/MacOS/stenograf"
+  codesign --force --sign - "$APP"
+  codesign --verify --deep --strict "$APP"
+fi
+echo "Готово: $APP"
+echo "Запуск: open $APP  (первый раз система спросит доступ к микрофону)"

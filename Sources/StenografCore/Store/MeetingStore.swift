@@ -70,23 +70,40 @@ public struct MeetingStore: Sendable {
         return url
     }
 
-    /// Свежайший документ встречи нужного вида ("summary" / "protocol") или nil.
-    /// Свежесть — по метке времени в имени файла (…-2026-11-22T05-10-13Z.md).
+    /// Сохраняет исправления и оставляет исходное распознавание рядом с записью.
+    public func correctTranscript(_ text: String, for meeting: Meeting) throws {
+        let url = transcriptURL(for: meeting)
+        let original = dir(for: meeting).appendingPathComponent("transcript-original.md")
+        if !FileManager.default.fileExists(atPath: original.path) {
+            try FileManager.default.copyItem(at: url, to: original)
+        }
+        try text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// Выдаёт документы, созданные по текущей версии транскрипта.
+    func currentDocuments(for meeting: Meeting) -> [URL] {
+        let keys: Set<URLResourceKey> = [.contentModificationDateKey]
+        let transcriptDate = try? transcriptURL(for: meeting).resourceValues(forKeys: keys).contentModificationDate
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: summariesDir(for: meeting), includingPropertiesForKeys: Array(keys)
+        )) ?? []
+        return files.filter { file in
+            guard file.pathExtension == "md" else { return false }
+            guard let transcriptDate else { return true }
+            guard let reportDate = try? file.resourceValues(forKeys: keys).contentModificationDate else { return false }
+            return reportDate >= transcriptDate
+        }
+    }
+
     public func latestDocument(meeting: Meeting, prefix: String) -> URL? {
-        let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(at: summariesDir(for: meeting), includingPropertiesForKeys: nil) else {
-            return nil
-        }
-        func stamp(_ name: String) -> String {
-            if let r = name.range(of: #"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z"#, options: .regularExpression) {
-                return String(name[r])
+        currentDocuments(for: meeting)
+            .filter { $0.lastPathComponent.hasPrefix(prefix + "-") }
+            .max { lhs, rhs in
+                let keys: Set<URLResourceKey> = [.contentModificationDateKey]
+                let left = (try? lhs.resourceValues(forKeys: keys).contentModificationDate) ?? .distantPast
+                let right = (try? rhs.resourceValues(forKeys: keys).contentModificationDate) ?? .distantPast
+                return left == right ? lhs.lastPathComponent < rhs.lastPathComponent : left < right
             }
-            return ""
-        }
-        return files
-            .filter { $0.pathExtension == "md" && $0.deletingPathExtension().lastPathComponent.hasPrefix(prefix) }
-            .sorted { stamp($0.lastPathComponent) > stamp($1.lastPathComponent) }
-            .first
     }
 
     public func readTranscript(_ meeting: Meeting) throws -> String {

@@ -114,12 +114,9 @@ public enum MeetingSearch {
         if let t = try? store.readTranscript(meeting), !t.isEmpty {
             out.append(("транскрипт", t))
         }
-        let summariesDir = store.summariesDir(for: meeting)
-        if let files = try? FileManager.default.contentsOfDirectory(at: summariesDir, includingPropertiesForKeys: nil) {
-            for f in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where f.pathExtension == "md" {
-                if let text = try? String(contentsOf: f, encoding: .utf8), !text.isEmpty {
-                    out.append((f.deletingPathExtension().lastPathComponent, text))
-                }
+        for file in store.currentDocuments(for: meeting).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            if let text = try? String(contentsOf: file, encoding: .utf8), !text.isEmpty {
+                out.append((file.deletingPathExtension().lastPathComponent, text))
             }
         }
         return out

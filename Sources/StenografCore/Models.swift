@@ -56,8 +56,13 @@ public struct WhisperConfig: Codable, Sendable {
     public var modelPath: String
     public var language: String   // "auto" (по умолчанию) или конкретный: "ru", "en", ...
 
+    public static var defaultCLIPath: String {
+        let paths = ["/opt/homebrew/bin/whisper-cli", "/usr/local/bin/whisper-cli"]
+        return paths.first(where: FileManager.default.isExecutableFile(atPath:)) ?? paths[0]
+    }
+
     public init(
-        cliPath: String = "/opt/homebrew/bin/whisper-cli",
+        cliPath: String = WhisperConfig.defaultCLIPath,
         modelPath: String = NSString(string: "~/.cache/whisper/ggml-medium-q5_0.bin").expandingTildeInPath,
         language: String = "auto"
     ) {

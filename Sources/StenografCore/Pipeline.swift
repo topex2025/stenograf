@@ -30,7 +30,7 @@ public enum Pipeline {
         try store.writeTranscript(whisperResult, to: &updated)
 
         let summary = try await summarize(
-            transcript: whisperResult.text,
+            transcript: store.readTranscript(updated),
             meeting: updated,
             store: store,
             brain: brain,

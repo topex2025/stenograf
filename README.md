@@ -1,8 +1,8 @@
 # Стенограф 🎙️
 
-**EN:** Stenograf is an open-source meeting memory for Mac: record a meeting, transcribe **locally** (whisper.cpp, ~100 languages auto-detected), and get a protocol with action items — powered by **your existing ChatGPT subscription** (official Codex sign-in, no API keys). Also: instant summary, Q&A over all your meetings (voice or text), neural voice answers (Piper), full-text search with Russian morphology. No subscriptions, no cloud, no telemetry. UI: Russian / English / Español.
+**EN:** Stenograf is an open-source meeting memory for Mac: record a meeting, transcribe **locally** (whisper.cpp, ~100 languages auto-detected), and get a protocol with action items — powered by **your existing ChatGPT subscription** (official Codex sign-in, no API keys). Also: instant summary, Q&A over all your meetings (voice or text), neural voice answers (Piper), full-text search with Russian morphology. No Stenograf subscription or telemetry. Cloud providers receive transcript text to generate reports. UI: Russian / English / Español.
 
-**Открытая память переговоров для Mac.** Записывает встречу, транскрибирует **локально** (whisper.cpp) и делает протокол «кто → что → кому → срок» через **вашу подписку ChatGPT** — вход вашим логином, без API-ключей. Никаких своих подписок, облаков и телеметрии.
+**Открытая память переговоров для Mac.** Записывает встречу, транскрибирует **локально** (whisper.cpp) и делает протокол «кто → что → кому → срок» через **вашу подписку ChatGPT** — вход вашим логином, без API-ключей. У Стенографа нет своей подписки и телеметрии. Для отчёта через ChatGPT текст встречи передаётся на обработку.
 
 > Позиционирование: бесплатная альтернатива Granola/PLAUD для тех, у кого уже есть ChatGPT (или GLM/Claude/Ollama — на выбор).
 
@@ -31,26 +31,22 @@
 
 ## Установка
 
-Требования: macOS 13+, [Homebrew](https://brew.sh).
+**[Скачать приложение для Mac](https://github.com/topex2025/stenograf/releases/latest).** Архив с суффиксом `-macos-universal.zip` подходит для Apple Silicon и Intel. Распакуйте его целиком и следуйте файлу «Установка.txt». Homebrew нужен для установки Whisper и Codex CLI. Для готового приложения Swift не нужен.
+
+Сборка не нотарифицирована Apple. Если macOS покажет предупреждение при открытии, см. [инструкцию Apple](https://support.apple.com/en-us/102445).
+
+### Сборка из исходников
+
+Сборка из исходников требует macOS 13+, [Homebrew](https://brew.sh) и Swift 6.0 или новее. Скрипт скачивает модель Whisper (около 500 МБ), ставит Codex CLI, собирает приложение и предлагает войти в ChatGPT.
 
 ```bash
-brew install whisper-cpp
-# модель (один раз, ~500 МБ; можно любую ggml-модель whisper.cpp)
-mkdir -p ~/.cache/whisper
-curl -L -o ~/.cache/whisper/ggml-medium-q5_0.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin
-
-# Codex CLI — мост к подписке ChatGPT (если ещё не стоит)
-npm install -g --prefix ~/.stenograf/cli @openai/codex "@openai/codex-darwin-arm64@npm:@openai/codex@latest-darwin-arm64"
-
-git clone https://github.com/<вы>/stenograf.git
+git clone https://github.com/topex2025/stenograf.git
 cd stenograf
-swift build
-.build/debug/stenograf config   # статус: whisper, мозги, вход ChatGPT
-.build/debug/stenograf login    # один раз: браузер → логин ChatGPT
+./scripts/setup.sh
+open build/Stenograf.app
 ```
 
-Откройте `~/.stenograf/config.json` и впишите свой ключ в нужный мозг.
+Для входа через ChatGPT API-ключ не нужен. Настройки модели находятся в `~/.stenograf/config.json`. Примеры ниже нужны только при выборе других поставщиков.
 
 ### Пример: GLM Coding Plan (Z.ai)
 
@@ -111,10 +107,12 @@ brew install ollama && ollama pull qwen3:14b
 scripts/make-app.sh && open build/Stenograf.app
 ```
 
+Если Whisper ошибся в имени, сумме или сроке, откройте карточку встречи, нажмите **Исправить текст**, сохраните правку и сформируйте **Отчёт** заново. Исходное распознавание остаётся в папке встречи, а старый отчёт скрывается из карточки и поиска.
+
 ## Приватность и принципы
 
-1. Аудио и транскрипты **не покидают ваш Mac** (Whisper работает локально).
-2. Наружу уходит только текст транскрипта — в **выбранный вами** мозг.
+1. Аудио обрабатывается Whisper на Mac. Записи и транскрипты хранятся локально.
+2. При выборе облачной модели текст передаётся для подготовки отчёта. С локальной моделью Ollama отчёт можно сформировать на том же Mac.
 3. Стенограф ничего не продаёт, не телеметрирует и не требует аккаунт.
 4. Продаются (в будущем, Pro) только фичи — никогда доступ к моделям.
 

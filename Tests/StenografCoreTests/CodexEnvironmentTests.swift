@@ -15,14 +15,14 @@ final class CodexEnvironmentTests: XCTestCase {
     }
 
     func testEnvironmentKeepsExistingEntriesWithoutDuplicates() {
-        // два вызова подряд — PATH не раздувается дублями
-        let e1 = CodexSubscriptionBrain.processEnvironment()
-        var stub = e1
-        stub["PATH"] = "/usr/local/bin:/usr/bin:/bin"
-        let e2 = CodexSubscriptionBrain.processEnvironment()
-        let parts = (e2["PATH"] ?? "").split(separator: ":").map(String.init)
+        let env = CodexSubscriptionBrain.processEnvironment(inheriting: [
+            "PATH": "/custom/bin:/usr/bin:/custom/bin:/usr/bin",
+            "LANG": "ru_RU.UTF-8",
+        ])
+        let parts = (env["PATH"] ?? "").split(separator: ":").map(String.init)
+        XCTAssertEqual(Array(parts.prefix(2)), ["/custom/bin", "/usr/bin"])
         XCTAssertEqual(Set(parts).count, parts.count, "дубликаты в PATH: \(parts)")
-        XCTAssertNotNil(e2["HOME"], "остальные переменные окружения сохраняются")
+        XCTAssertEqual(env["LANG"], "ru_RU.UTF-8")
     }
 
     /// Живой прогон: codex --version реально запускается с нашим окружением,

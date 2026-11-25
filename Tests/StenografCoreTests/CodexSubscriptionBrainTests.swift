@@ -13,10 +13,14 @@ final class CodexSubscriptionBrainTests: XCTestCase {
         return path
     }
 
-    func testHappyPathPassesFlagsAndReadsLastMessage() async throws {
+    func testReadsLongTranscriptAndWritesReportDespiteVerboseOutput() async throws {
         let argsFile = FileManager.default.temporaryDirectory.appendingPathComponent("fake-codex-args-\(UUID()).txt").path
+        let inputFile = argsFile + ".stdin"
         let fake = makeFakeCodex(script: """
         echo "$@" > "\(argsFile)"
+        cat > "\(inputFile)"
+        /usr/bin/head -c 262144 /dev/zero
+        /usr/bin/head -c 262144 /dev/zero >&2
         out=""
         prev=""
         for a in "$@"; do
@@ -25,10 +29,13 @@ final class CodexSubscriptionBrainTests: XCTestCase {
         done
         printf 'ПРОТОКОЛ ЧЕРЕЗ ПОДПИСКУ ОК' > "$out"
         """)
-        defer { try? FileManager.default.removeItem(atPath: fake) }
+        defer {
+            for file in [fake, argsFile, inputFile] { try? FileManager.default.removeItem(atPath: file) }
+        }
 
-        let brain = CodexSubscriptionBrain(cliPath: fake, model: "gpt-5.2-codex", timeout: 30)
-        let answer = try await brain.complete(system: "sys-prompt", user: "user-text")
+        let brain = CodexSubscriptionBrain(cliPath: fake, model: "gpt-5.2-codex", timeout: 4)
+        let transcript = String(repeating: "Анна согласовала смету. ", count: 12_000)
+        let answer = try await brain.complete(system: "sys-prompt", user: transcript)
 
         XCTAssertEqual(answer, "ПРОТОКОЛ ЧЕРЕЗ ПОДПИСКУ ОК")
         let args = try String(contentsOfFile: argsFile, encoding: .utf8)
@@ -36,8 +43,22 @@ final class CodexSubscriptionBrainTests: XCTestCase {
         XCTAssertTrue(args.contains("--skip-git-repo-check"), "нужен флаг вне-_git: \(args)")
         XCTAssertTrue(args.contains("-s") && args.contains("read-only"), "песочница read-only: \(args)")
         XCTAssertTrue(args.contains("-m") && args.contains("gpt-5.2-codex"), "модель: \(args)")
-        XCTAssertTrue(args.contains("sys-prompt"), "system-промпт передан: \(args)")
-        XCTAssertTrue(args.contains("user-text"), "user-текст передан: \(args)")
+        XCTAssertTrue(args.hasSuffix("-\n"))
+        XCTAssertEqual(try String(contentsOfFile: inputFile, encoding: .utf8), "sys-prompt\n\n===\n\n" + transcript)
+    }
+
+    func testTimeoutStopsCodex() async throws {
+        let fake = makeFakeCodex(script: "exec /bin/sleep 8")
+        defer { try? FileManager.default.removeItem(atPath: fake) }
+        let clock = ContinuousClock()
+        let started = clock.now
+        do {
+            _ = try await CodexSubscriptionBrain(cliPath: fake, timeout: 1).complete(system: "s", user: "u")
+            XCTFail("ожидали таймаут")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("таймаут"))
+            XCTAssertLessThan(started.duration(to: clock.now), .seconds(6))
+        }
     }
 
     func testUsageLimitBecomesFriendlyMessage() async throws {

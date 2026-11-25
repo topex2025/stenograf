@@ -60,14 +60,19 @@ public struct WhisperCLI: Sendable {
             "-np",
             "-t", "8",
         ]
-        let stderrPipe = Pipe()
-        process.standardError = stderrPipe
-        process.standardOutput = Pipe()
+        let diagnostics = outDir.appendingPathComponent("stderr.txt")
+        try Data().write(to: diagnostics)
+        let stderr = try FileHandle(forWritingTo: diagnostics)
+        defer { try? stderr.close() }
+        process.standardError = stderr
+        process.standardOutput = FileHandle.nullDevice
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
-            let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            let errText = String(data: errData.prefix(1000), encoding: .utf8) ?? ""
+            let reader = try FileHandle(forReadingFrom: diagnostics)
+            defer { try? reader.close() }
+            let errData = try reader.read(upToCount: 4096) ?? Data()
+            let errText = String(decoding: errData, as: UTF8.self)
             throw StenografError.whisperFailed(process.terminationStatus, errText)
         }
 
@@ -83,7 +88,7 @@ public struct WhisperCLI: Sendable {
             segments = parsed.transcription.map {
                 Segment(start: $0.offsets.from / 1000.0, end: $0.offsets.to / 1000.0, text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines))
             }
-            detectedLanguage = parsed.language
+            detectedLanguage = parsed.result?.language ?? parsed.language
         }
         return Result(
             text: text.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -95,6 +100,8 @@ public struct WhisperCLI: Sendable {
     fileprivate struct WhisperJSON: Codable {
         let transcription: [Entry]
         let language: String?
+        let result: Detection?
+        struct Detection: Codable { let language: String? }
         struct Entry: Codable {
             let offsets: Offsets
             let text: String
